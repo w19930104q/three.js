@@ -1,8 +1,8 @@
-import { ColorManagement } from '../../../../src/math/ColorManagement.js';
+import { ColorManagement, SRGBToLinear, LinearToSRGB } from '../../../../src/math/ColorManagement.js';
 import { Color } from '../../../../src/math/Color.js';
 import { Matrix3 } from '../../../../src/math/Matrix3.js';
 import { Vector3 } from '../../../../src/math/Vector3.js';
-import { LinearSRGBColorSpace, LinearTransfer } from '../../../../src/constants.js';
+import { LinearSRGBColorSpace, LinearTransfer, SRGBColorSpace } from '../../../../src/constants.js';
 import { eps } from '../../utils/math-constants.js';
 
 export default QUnit.module( 'Maths', () => {
@@ -73,6 +73,110 @@ export default QUnit.module( 'Maths', () => {
 			}
 
 			delete ColorManagement.spaces[ LinearDisplayP3ColorSpace ];
+
+		} );
+
+		QUnit.test( 'convert (sRGB round trip)', ( assert ) => {
+
+			// Fixed set of sRGB colors, including the transfer function
+			// segment boundaries and both endpoints of the gamut.
+			const colors = [
+				[ 0, 0, 0 ],
+				[ 1, 1, 1 ],
+				[ 1, 0, 0 ],
+				[ 0, 1, 0 ],
+				[ 0, 0, 1 ],
+				[ 0.5, 0.25, 0.75 ],
+				[ 0.073, 0.214, 0.448 ],
+				[ 0.0031308, 0.04045, 0.5 ],
+				[ 0.123456, 0.654321, 0.987654 ]
+			];
+
+			// Note: the tolerance must stay above ~1e-7 because the rounded
+			// sRGB constants (0.0031308 / 0.04045) make the piecewise transfer
+			// function slightly discontinuous at the segment boundary.
+			const tolerance = 1e-7;
+			const color = new Color();
+
+			for ( const rgb of colors ) {
+
+				// SRGBColorSpace -> working color space -> SRGBColorSpace
+				color.setRGB( rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], SRGBColorSpace );
+				ColorManagement.workingToColorSpace( color, SRGBColorSpace );
+
+				assert.ok(
+					Math.abs( color.r - rgb[ 0 ] ) < tolerance &&
+					Math.abs( color.g - rgb[ 1 ] ) < tolerance &&
+					Math.abs( color.b - rgb[ 2 ] ) < tolerance,
+					`sRGB to working to sRGB round trip for ( ${ rgb } ) stays within tolerance.`
+				);
+
+				// working color space -> SRGBColorSpace -> working color space
+				color.setRGB( rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], LinearSRGBColorSpace );
+				ColorManagement.workingToColorSpace( color, SRGBColorSpace );
+				ColorManagement.colorSpaceToWorking( color, SRGBColorSpace );
+
+				assert.ok(
+					Math.abs( color.r - rgb[ 0 ] ) < tolerance &&
+					Math.abs( color.g - rgb[ 1 ] ) < tolerance &&
+					Math.abs( color.b - rgb[ 2 ] ) < tolerance,
+					`Working to sRGB to working round trip for ( ${ rgb } ) stays within tolerance.`
+				);
+
+			}
+
+		} );
+
+		QUnit.test( 'convert matches Color transfer methods', ( assert ) => {
+
+			// ColorManagement.convert() and Color's own transfer methods
+			// (convertSRGBToLinear/convertLinearToSRGB) must agree exactly.
+			const colors = [
+				[ 0, 0, 0 ],
+				[ 1, 1, 1 ],
+				[ 0.5, 0.25, 0.75 ],
+				[ 0.0031308, 0.04045, 0.5 ],
+				[ 0.123456, 0.654321, 0.987654 ]
+			];
+
+			const a = new Color();
+			const b = new Color();
+
+			for ( const rgb of colors ) {
+
+				ColorManagement.convert( a.fromArray( rgb ), SRGBColorSpace, LinearSRGBColorSpace );
+				b.fromArray( rgb ).convertSRGBToLinear();
+
+				assert.ok( a.equals( b ), `sRGB to linear matches for ( ${ rgb } ).` );
+
+				ColorManagement.convert( a.fromArray( rgb ), LinearSRGBColorSpace, SRGBColorSpace );
+				b.fromArray( rgb ).convertLinearToSRGB();
+
+				assert.ok( a.equals( b ), `Linear to sRGB matches for ( ${ rgb } ).` );
+
+			}
+
+		} );
+
+		QUnit.test( 'SRGBToLinear/LinearToSRGB (round trip)', ( assert ) => {
+
+			const tolerance = 1e-9;
+
+			for ( let i = 0; i <= 1000; i ++ ) {
+
+				const c = i / 1000;
+
+				assert.ok(
+					Math.abs( LinearToSRGB( SRGBToLinear( c ) ) - c ) < tolerance,
+					`sRGB to linear to sRGB round trip stays within tolerance for ${ c }.`
+				);
+
+				assert.ok(
+					Math.abs( SRGBToLinear( LinearToSRGB( c ) ) - c ) < tolerance,
+					`Linear to sRGB to linear round trip stays within tolerance for ${ c }.`
+				);
+
+			}
 
 		} );
 

@@ -141,6 +141,65 @@ export default QUnit.module( 'Maths', () => {
 
 		} );
 
+		QUnit.test( 'setHSL/getHSL (round trip)', ( assert ) => {
+
+			ColorManagement.enabled = true;
+
+			// Fixed set of HSL colors, converted to the linear working
+			// color space by setHSL() and back to sRGB by getHSL().
+			const colors = [
+				[ 0, 1, 0.5 ],
+				[ 1 / 12, 0.5, 0.25 ],
+				[ 2 / 12, 0.75, 0.75 ],
+				[ 0.25, 1, 0.1 ],
+				[ 1 / 3, 0.1, 0.9 ],
+				[ 5 / 12, 0.6, 0.5 ],
+				[ 0.5, 1, 0.5 ],
+				[ 7 / 12, 0.4, 0.3 ],
+				[ 2 / 3, 0.9, 0.6 ],
+				[ 0.75, 1, 0.25 ],
+				[ 5 / 6, 0.2, 0.8 ],
+				[ 11 / 12, 0.5, 0.5 ]
+			];
+
+			const tolerance = 1e-9;
+			const c = new Color();
+			const hsl = { h: 0, s: 0, l: 0 };
+
+			for ( const [ h, s, l ] of colors ) {
+
+				c.setHSL( h, s, l, SRGBColorSpace );
+				c.getHSL( hsl, SRGBColorSpace );
+
+				assert.ok(
+					Math.abs( hsl.h - h ) < tolerance &&
+					Math.abs( hsl.s - s ) < tolerance &&
+					Math.abs( hsl.l - l ) < tolerance,
+					`HSL round trip for ( ${ h }, ${ s }, ${ l } ) stays within tolerance.`
+				);
+
+			}
+
+			// repeated round trips must not drift
+			c.setHSL( 0.3, 0.6, 0.5, SRGBColorSpace );
+			const expected = c.clone();
+
+			for ( let i = 0; i < 100; i ++ ) {
+
+				c.getHSL( hsl, SRGBColorSpace );
+				c.setHSL( hsl.h, hsl.s, hsl.l, SRGBColorSpace );
+
+			}
+
+			assert.ok(
+				Math.abs( c.r - expected.r ) < 1e-8 &&
+				Math.abs( c.g - expected.g ) < 1e-8 &&
+				Math.abs( c.b - expected.b ) < 1e-8,
+				'Repeated HSL round trips do not drift.'
+			);
+
+		} );
+
 		QUnit.test( 'setStyle', ( assert ) => {
 
 			ColorManagement.enabled = false; // TODO: Update and enable.
